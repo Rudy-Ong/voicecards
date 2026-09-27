@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voice Postcard</title>
+  <meta name="description" content="Record a voice postcard, save it locally, and turn it into a printable QR card.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Great+Vibes&family=Playfair+Display:wght@600;700&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    :root {
+      --paper: #f4efe7;
+      --ink: #202522;
+      --muted: #6d716b;
+      --line: #d8d0c4;
+      --coral: #dc684d;
+      --coral-dark: #a94434;
+      --sage: #aab8a0;
+      --yellow: #f5c96b;
+      --green: #3f7a4f;
+      --white: #fffdf8;
+      --shadow: 0 18px 48px rgba(54, 47, 37, .12);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--paper); font-family: 'DM Mono', monospace; min-height: 100vh; }
+    body::before { content: ''; position: fixed; inset: 0; pointer-events: none; opacity: .18; background-image: radial-gradient(#b5aa9d .7px, transparent .7px); background-size: 7px 7px; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .shell { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 30px 0 70px; position: relative; }
+    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 44px; }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .mark { width: 44px; height: 44px; display: grid; place-items: center; background: var(--coral); color: var(--white); border-radius: 50%; font: 700 23px/1 'Playfair Display', serif; transform: rotate(-9deg); }
+    .eyebrow { color: var(--coral-dark); letter-spacing: .12em; font-size: 11px; text-transform: uppercase; }
+    .brand strong { display: block; font: 700 21px/1.1 'Playfair Display', serif; }
+    .saved-pill { padding: 9px 12px; border: 1px solid var(--line); border-radius: 30px; font-size: 11px; color: var(--muted); background: rgba(255,253,248,.45); }
+    .intro { max-width: 760px; margin-bottom: 30px; }
+    h1 { font: 700 clamp(42px, 7vw, 78px)/.94 'Playfair Display', serif; letter-spacing: -.02em; margin: 0 0 18px; }
+    .intro p { color: var(--muted); max-width: 540px; line-height: 1.7; margin: 0; font-size: 13px; }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(320px, .82fr); gap: 22px; align-items: start; }
+    .panel { background: rgba(255,253,248,.82); border: 1px solid var(--line); box-shadow: var(--shadow); }
+    .recorder { padding: clamp(24px, 4vw, 42px); min-height: 480px; position: relative; overflow: hidden; }
+    .recorder::after { content: ''; width: 210px; height: 210px; border-radius: 50%; background: var(--sage); position: absolute; right: -80px; top: -90px; opacity: .5; }
+    .section-label { display: flex; justify-content: space-between; align-items: center; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); position: relative; z-index: 1; }
+    .duration-control { display: flex; align-items: center; gap: 8px; }
+    .duration-control input { width: 54px; background: transparent; border: 0; border-bottom: 1px solid var(--ink); text-align: right; padding: 2px; color: var(--ink); }
+    .duration-control input:focus { outline: 2px solid var(--yellow); outline-offset: 2px; }
+    .record-stage { display: grid; place-items: center; padding: 60px 0 34px; position: relative; z-index: 1; }
+    .record-button { width: 158px; height: 158px; border: 0; border-radius: 50%; color: var(--white); background: var(--coral); box-shadow: 0 0 0 15px rgba(220,104,77,.12), 0 14px 24px rgba(169,68,52,.25); transition: transform .2s ease, background .2s ease; }
+    .record-button:hover { transform: scale(1.035); }
+    .record-button:disabled { opacity: .5; cursor: wait; }
+    .record-button.recording { background: var(--ink); box-shadow: 0 0 0 15px rgba(32,37,34,.1), 0 14px 24px rgba(32,37,34,.2); animation: pulse 1.5s infinite; }
+    .record-icon { display: block; width: 37px; height: 37px; margin: 0 auto 12px; background: currentColor; border-radius: 50%; }
+    .recording .record-icon { width: 30px; height: 30px; border-radius: 5px; }
+    .record-button span:last-child { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 27px rgba(32,37,34,.04), 0 14px 24px rgba(32,37,34,.2); } }
+    .timer { font-size: 31px; text-align: center; letter-spacing: .04em; }
+    .timer small { display: block; color: var(--muted); font-size: 10px; letter-spacing: .1em; margin-top: 7px; text-transform: uppercase; }
+    .wave { height: 45px; display: flex; justify-content: center; align-items: center; gap: 4px; margin-top: 22px; }
+    .wave i { display: block; width: 3px; height: 12px; background: var(--sage); border-radius: 5px; }
+    .wave i:nth-child(2n) { height: 24px; }.wave i:nth-child(3n) { height: 37px; }.wave i:nth-child(4n) { height: 18px; }
+    .recording + .timer .wave i { animation: wave .8s ease-in-out infinite alternate; background: var(--coral); }
+    .recording + .timer .wave i:nth-child(2n) { animation-delay: -.2s; }.recording + .timer .wave i:nth-child(3n) { animation-delay: -.4s; }
+    @keyframes wave { to { transform: scaleY(.35); } }
+    .audio-preview { width: 100%; margin-top: 20px; }
+    .listen { margin-top: 8px; position: relative; z-index: 1; }
+    .listen-head { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+    .listen-row { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+    .listen-row .audio-preview { flex: 1; min-width: 0; margin: 0; }
+    .listen-row .secondary { flex: none; min-width: 96px; }
+    .upload-result { margin-top: 18px; padding: 14px; border: 1px solid var(--green); background: rgba(63,122,79,.08); font-size: 11px; line-height: 1.6; }
+    .upload-result strong { color: var(--green); font-size: 12px; letter-spacing: .04em; }
+    .upload-result p { margin: 4px 0 0; color: var(--muted); word-break: break-all; white-space: pre-line; }
+    .upload-result .audio-preview { margin-top: 10px; }
+    .action-row { display: flex; gap: 10px; align-items: center; margin-top: 24px; position: relative; z-index: 1; }
+    .primary, .secondary { border: 1px solid var(--ink); border-radius: 2px; padding: 13px 17px; font-size: 11px; letter-spacing: .04em; transition: .2s ease; }
+    .primary { color: var(--white); background: var(--ink); }.primary:hover { background: var(--coral-dark); border-color: var(--coral-dark); }
+    .primary:disabled { opacity: .4; cursor: not-allowed; }
+    .secondary { background: transparent; color: var(--ink); }.secondary:hover { background: var(--yellow); }
+    .status { min-height: 18px; color: var(--muted); font-size: 11px; line-height: 1.5; margin: 18px 0 0; }
+    .stamp-panel { padding: 24px; }
+    .stamp-panel h2 { font: 600 26px/1.1 'Playfair Display', serif; margin: 0 0 9px; }
+    .stamp-panel > p { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 0 0 22px; }
+    .qr-wrap { min-height: 270px; display: grid; place-items: center; background: var(--yellow); border: 1px dashed rgba(32,37,34,.35); padding: 20px; }
+    #qrcode { background: var(--white); padding: 10px; line-height: 0; }.qr-empty { text-align: center; color: rgba(32,37,34,.6); font-size: 11px; line-height: 1.6; max-width: 180px; }
+    .card-caption { display: flex; justify-content: space-between; align-items: end; border-bottom: 1px solid var(--line); padding: 17px 0 12px; margin-bottom: 17px; }
+    .card-caption strong { font: 600 19px 'Playfair Display', serif; }.card-caption span { font-size: 10px; color: var(--muted); }
+    .config { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 18px; }
+    .config summary { cursor: pointer; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }.config summary::marker { color: var(--coral); }
+    .fields { display: grid; gap: 12px; margin-top: 15px; }.fields label { display: grid; gap: 6px; color: var(--muted); font-size: 10px; }.fields input { width: 100%; border: 1px solid var(--line); border-radius: 2px; background: var(--paper); color: var(--ink); padding: 10px; font-size: 11px; }.fields input:focus { outline: 2px solid var(--yellow); border-color: var(--ink); }
+    .helper { font-size: 10px; color: var(--muted); line-height: 1.55; margin: 14px 0 0; }.helper a { color: var(--coral-dark); }.helper code { font-size: 10px; }
+    .stamp-panel .action-row { margin-top: 18px; }
+    .player { max-width: 650px; margin: 100px auto; padding: 34px; text-align: center; }.player h1 { font-size: 52px; }.player .audio-preview { margin: 30px 0 12px; }
+    .hidden { display: none !important; }
+    @media (max-width: 760px) { .shell { width: min(100% - 24px, 560px); padding-top: 20px; } header { margin-bottom: 34px; }.saved-pill { display: none; }.workspace { grid-template-columns: 1fr; }.recorder { min-height: auto; padding: 24px 20px 28px; }.record-stage { padding: 48px 0 25px; }.record-button { width: 140px; height: 140px; }.action-row { flex-wrap: wrap; }.action-row button { flex: 1; }.stamp-panel { padding: 20px; } }
+    /* ---- 03 / Card designer (screen UI) ---- */
+    .designer { margin-top: 22px; padding: clamp(24px, 4vw, 42px); }
+    .designer-grid { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(0, 1.2fr); gap: 32px; margin-top: 24px; align-items: start; }
+    .design-form { display: grid; gap: 16px; }
+    .design-form label, .design-form legend { display: grid; gap: 6px; color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+    .design-form input:not([type=radio]), .design-form select, .design-form textarea { width: 100%; border: 1px solid var(--line); border-radius: 2px; background: var(--paper); color: var(--ink); padding: 10px; font: inherit; font-size: 12px; letter-spacing: 0; text-transform: none; }
+    .design-form textarea { resize: vertical; line-height: 1.5; }
+    .design-form input:focus, .design-form select:focus, .design-form textarea:focus { outline: 2px solid var(--yellow); border-color: var(--ink); }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .occasions { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+    .occasions legend { margin-bottom: 8px; }
+    .occasions label { display: block; position: relative; }
+    .occasions input { position: absolute; opacity: 0; pointer-events: none; }
+    .occasions span { display: inline-block; padding: 9px 13px; border: 1px solid var(--ink); color: var(--ink); font-size: 11px; letter-spacing: .02em; text-transform: none; cursor: pointer; transition: .2s ease; }
+    .occasions span:hover { background: var(--yellow); }
+    .occasions input:checked + span { background: var(--ink); color: var(--white); }
+    .occasions input:focus-visible + span { outline: 2px solid var(--yellow); outline-offset: 2px; }
+    .design-form .helper { margin: 0; }
+    .preview-wrap { background: #e8e0d3; padding: 24px; display: grid; place-items: center; min-width: 0; }
+    .preview-box { position: relative; }
+    .preview-scaler { position: absolute; top: 0; left: 0; transform-origin: top left; }
+    @media (max-width: 760px) { .designer { padding: 24px 20px; } .designer-grid { grid-template-columns: 1fr; } .preview-wrap { padding: 14px; } }
+
+    /* ---- The printable card. Sized in mm; --u is 1% of the short side so
+       both paper sizes and orientations scale the same design. ---- */
+    .card { --u: 1.48mm; width: 148mm; height: 210mm; position: relative; overflow: hidden; background: var(--c-bg); color: var(--c-ink); font-family: 'DM Mono', monospace; box-shadow: 0 10px 30px rgba(54,47,37,.18); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .card::before, .card::after { content: ''; position: absolute; pointer-events: none; z-index: 0; }
+    .card-art { position: absolute; inset: 0; z-index: 1; pointer-events: none; color: var(--c-accent); }
+    .art-band { position: absolute; left: 0; width: 100%; height: calc(var(--u) * 22); display: block; }
+    .art-top { top: 0; } .art-bottom { bottom: 0; }
+    .card-body { position: relative; z-index: 2; height: 100%; padding: calc(var(--u) * 16) calc(var(--u) * 11) calc(var(--u) * 15); display: flex; flex-direction: column; align-items: center; text-align: center; gap: calc(var(--u) * 4); }
+    .card-text { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: calc(var(--u) * 2.6); min-height: 0; }
+    .card-title { margin: 0; font: 700 calc(var(--u) * 10)/1.02 var(--c-title-font); letter-spacing: -.01em; }
+    .card-names { margin: 0; font: 400 calc(var(--u) * 8)/1.15 var(--c-names-font); color: var(--c-accent2); }
+    .card-message { margin: 0 auto; max-width: calc(var(--u) * 78); font-size: calc(var(--u) * 2.9); line-height: 1.6; white-space: pre-line; }
+    .card-stamp { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 2.4); }
+    .card-qr { width: calc(var(--u) * 34); aspect-ratio: 1; padding: calc(var(--u) * 2); background: #fff; border: .45mm solid var(--c-accent); display: grid; place-items: center; }
+    .card-qr img, .card-qr canvas { width: 100% !important; height: auto !important; display: block; }
+    .card-qr .qr-placeholder { font-size: calc(var(--u) * 2.3); line-height: 1.5; color: #8a8a8a; text-align: center; padding: 0 calc(var(--u) * 2); }
+    .card-scan { margin: 0; font-size: calc(var(--u) * 2.3); letter-spacing: .16em; text-transform: uppercase; }
+    .card-footer { margin: 0; width: 100%; display: flex; justify-content: space-between; gap: calc(var(--u) * 4); font-size: calc(var(--u) * 2.4); letter-spacing: .06em; }
+    .card-footer span:empty { display: none; }
+    .card-footer span:only-child { margin: 0 auto; }
+    .card [hidden] { display: none !important; }
+    .card[data-orientation=landscape] .card-body { display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto; column-gap: calc(var(--u) * 12); row-gap: calc(var(--u) * 4); align-items: center; text-align: left; padding: calc(var(--u) * 17) calc(var(--u) * 14) calc(var(--u) * 13); }
+    .card[data-orientation=landscape] .card-message { margin: 0; }
+    .card[data-orientation=landscape] .card-footer { grid-column: 1 / -1; }
+
+    /* Classic: the app's own look, with the yellow stamp. */
+    .card[data-theme=classic] { --c-bg: #f4efe7; --c-ink: #202522; --c-accent: #dc684d; --c-accent2: #a94434; --c-title-font: 'Playfair Display', serif; --c-names-font: 'Playfair Display', serif; }
+    .card[data-theme=classic] .card-qr { border: .35mm dashed #202522; box-shadow: 0 0 0 calc(var(--u) * 2.4) #f5c96b; margin: calc(var(--u) * 2.4); }
+    .card[data-theme=classic] .card-names { font-weight: 600; font-size: calc(var(--u) * 6); }
+
+    /* Wedding: ivory, gold double frame, leafy sprigs, script names. */
+    .card[data-theme=wedding] { --c-bg: #fbf8f1; --c-ink: #2f3a32; --c-accent: #b08d57; --c-accent2: #4f6b4c; --c-title-font: 'Playfair Display', serif; --c-names-font: 'Great Vibes', cursive; }
+    .card[data-theme=wedding]::before { inset: calc(var(--u) * 4.5); border: .45mm solid var(--c-accent); }
+    .card[data-theme=wedding]::after { inset: calc(var(--u) * 5.7); border: .15mm solid var(--c-accent); }
+    .card[data-theme=wedding] .card-art { color: #7d9a78; }
+    .card[data-theme=wedding] .card-title { font-size: calc(var(--u) * 3.4); font-weight: 600; letter-spacing: .38em; text-transform: uppercase; color: var(--c-accent); }
+    .card[data-theme=wedding] .card-names { font-size: calc(var(--u) * 14); line-height: 1; }
+    .card[data-theme=wedding] .card-qr { border-width: .3mm; box-shadow: 0 0 0 calc(var(--u) * 1) #fbf8f1, 0 0 0 calc(var(--u) * 1.2) var(--c-accent); }
+
+    /* Birthday: warm cream, confetti, bold headline. */
+    .card[data-theme=birthday] { --c-bg: #fff3e3; --c-ink: #3b2a20; --c-accent: #e0603f; --c-accent2: #2f7f78; --c-title-font: 'Playfair Display', serif; --c-names-font: 'Quicksand', sans-serif; }
+    .card[data-theme=birthday] .card-title { font-size: calc(var(--u) * 11.5); color: var(--c-accent); }
+    .card[data-theme=birthday] .card-names { font-weight: 700; font-size: calc(var(--u) * 7); }
+    .card[data-theme=birthday] .card-qr { border: .6mm solid var(--c-accent); border-radius: calc(var(--u) * 2); }
+
+    /* New baby: soft sage and peach, moon and stars, rounded type. */
+    .card[data-theme=baby] { --c-bg: #f1f5f3; --c-ink: #3d4a55; --c-accent: #8fb0c9; --c-accent2: #d58a70; --c-title-font: 'Quicksand', sans-serif; --c-names-font: 'Great Vibes', cursive; }
+    .card[data-theme=baby] .card-title { font-size: calc(var(--u) * 8.5); font-weight: 700; letter-spacing: 0; }
+    .card[data-theme=baby] .card-names { font-size: calc(var(--u) * 12); line-height: 1; }
+    .card[data-theme=baby] .card-message, .card[data-theme=baby] .card-scan, .card[data-theme=baby] .card-footer { font-family: 'Quicksand', sans-serif; font-weight: 500; }
+    .card[data-theme=baby] .card-qr { border: .6mm solid var(--c-accent); border-radius: calc(var(--u) * 4); }
+
+    /* Farewell: airmail stripes, paper plane, navy ink. */
+    .card[data-theme=farewell] { --c-bg: #f3ede2; --c-ink: #1f2f45; --c-accent: #c8553d; --c-accent2: #c8553d; --c-title-font: 'Playfair Display', serif; --c-names-font: 'Great Vibes', cursive; }
+    .card[data-theme=farewell]::before { inset: 0; background: repeating-linear-gradient(-45deg, #c8553d 0 calc(var(--u) * 3), #f3ede2 calc(var(--u) * 3) calc(var(--u) * 5), #1f2f45 calc(var(--u) * 5) calc(var(--u) * 8), #f3ede2 calc(var(--u) * 8) calc(var(--u) * 10)); }
+    .card[data-theme=farewell]::after { inset: calc(var(--u) * 3.2); background: #f3ede2; }
+    .card[data-theme=farewell] .card-title { font-size: calc(var(--u) * 11); }
+    .card[data-theme=farewell] .card-names { font-size: calc(var(--u) * 11); line-height: 1; }
+    .card[data-theme=farewell] .card-qr { border: .35mm dashed var(--c-ink); }
+
+    /* ---- Print: only the card, at real size (the @page size is set from JS). ---- */
+    .print-empty { display: none; }
+    @media print {
+      html, body { margin: 0; padding: 0; background: #fff; min-height: 0; }
+      body::before { display: none; }
+      .shell { width: auto; margin: 0; padding: 0; }
+      .shell > *:not(#designer), #playerView { display: none !important; }
+      .designer { border: 0; box-shadow: none; padding: 0; margin: 0; background: none; }
+      .designer > .section-label, .design-form { display: none !important; }
+      .designer-grid { display: block; margin: 0; }
+      .preview-wrap { padding: 0; background: none; display: block; }
+      .preview-box { width: auto !important; height: auto !important; }
+      .preview-scaler { position: static; transform: none !important; }
+      .card { box-shadow: none; }
+      /* No uploaded clip yet: print a notice instead of a card without a QR. */
+      body:not(.card-ready) .shell { display: none !important; }
+      body:not(.card-ready) .print-empty { display: block !important; font-size: 14px; padding: 20mm; }
+    }
+  </style>
+  <style id="pageStyle">@page { size: 148mm 210mm; margin: 0; }</style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="brand"><div class="mark">V</div><div><span class="eyebrow">A little sound, sent</span><strong>Voice Postcard</strong></div></div>
+      <div class="saved-pill" id="savedPill">No recording saved yet</div>
+    </header>
+    <section class="intro">
+      <h1>Say it with<br>your voice.</h1>
+      <p>Record a short message, keep a copy in this browser, then create a QR card that anyone can scan to hear it.</p>
+    </section>
+    <div id="recorderView" class="workspace">
+      <section class="panel recorder" aria-labelledby="recordHeading">
+        <div class="section-label"><span id="recordHeading">01 / Record</span><label class="duration-control">limit <input id="duration" type="number" min="5" max="120" value="30" aria-label="Recording limit in seconds"> sec</label></div>
+        <div class="record-stage">
+          <button class="record-button" id="recordButton" type="button" aria-label="Start recording"><i class="record-icon"></i><span>Start here</span></button>
+          <div class="timer" id="timer">00:00<small>ready when you are</small><div class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+        </div>
+        <div class="listen hidden" id="listenBlock">
+          <div class="listen-head"><span>Listen back</span><span id="clipInfo"></span></div>
+          <div class="listen-row"><button class="secondary" id="playPreview" type="button">&#9654; Play</button><audio class="audio-preview" id="audioPreview" controls preload="metadata"></audio></div>
+        </div>
+        <div class="action-row"><button class="primary" id="createCard" type="button" disabled>Create card & upload</button><button class="secondary" id="clearRecording" type="button" disabled>Clear local copy</button></div>
+        <p class="status" id="status" role="status">Your recording stays in this browser until you create a card.</p>
+      </section>
+      <aside class="panel stamp-panel" aria-labelledby="stampHeading">
+        <div class="card-caption"><strong id="stampHeading">02 / Your stamp</strong><span>SCAN TO LISTEN</span></div>
+        <div class="qr-wrap"><div class="qr-empty" id="qrEmpty">Your QR code will appear here after the audio is uploaded.</div><div id="qrcode" class="hidden" aria-label="Generated QR code"></div></div>
+        <p class="helper">The code opens this page with the uploaded audio ready to play. For a recipient to scan it, publish this page at a public URL first.</p>
+        <div class="upload-result hidden" id="uploadResult" role="status">
+          <strong>&#10003; Uploaded to Cloudinary</strong>
+          <p id="uploadDetails"></p>
+          <audio class="audio-preview" id="cloudAudio" controls preload="none"></audio>
+          <p>Play this to hear exactly what your friend will hear.</p>
+        </div>
+        <div class="action-row hidden" id="cardActions"><button class="secondary" id="printButton" type="button">Print this card</button><button class="secondary" id="copyLink" type="button">Copy link</button></div>
+        <details class="config"><summary>Fallback: unsigned upload</summary><div class="fields"><label>Cloud name<input id="cloudName" type="text" placeholder="your-cloud-name" autocomplete="off"></label><label>Unsigned upload preset<input id="uploadPreset" type="text" placeholder="your-upload-preset" autocomplete="off"></label></div><p class="helper">Only needed when this page is hosted without the <code>/api/sign</code> function (e.g. GitHub Pages). Values are saved in this browser only.</p></details>
+      </aside>
+    </div>
+    <section class="panel designer" id="designer" aria-labelledby="designHeading">
+      <div class="section-label"><span id="designHeading">03 / Design the printed card</span><span id="paperInfo"></span></div>
+      <div class="designer-grid">
+        <form class="design-form" id="designForm" onsubmit="return false">
+          <fieldset class="occasions">
+            <legend>Occasion</legend>
+            <label><input type="radio" name="occasion" value="wedding" checked><span>Wedding</span></label>
+            <label><input type="radio" name="occasion" value="birthday"><span>Birthday</span></label>
+            <label><input type="radio" name="occasion" value="baby"><span>New baby</span></label>
+            <label><input type="radio" name="occasion" value="farewell"><span>Farewell</span></label>
+            <label><input type="radio" name="occasion" value="classic"><span>Classic</span></label>
+          </fieldset>
+          <div class="field-row">
+            <label>Paper<select id="paper"><option value="A5">A5 · 148 × 210 mm</option><option value="B5">B5 (ISO) · 176 × 250 mm</option><option value="B5-JIS">B5 (JIS) · 182 × 257 mm</option></select></label>
+            <label>Orientation<select id="orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
+          </div>
+          <label>Headline<input id="cardTitle" type="text" maxlength="40"></label>
+          <label>Names<input id="cardNames" type="text" maxlength="40"></label>
+          <label>Message<textarea id="cardMessage" rows="3" maxlength="220"></textarea></label>
+          <div class="field-row">
+            <label>Date<input id="cardDate" type="text" maxlength="40" placeholder="e.g. 12 October 2026"></label>
+            <label>From<input id="cardFrom" type="text" maxlength="40" placeholder="e.g. With love, Rudy"></label>
+          </div>
+          <p class="helper">Leave a field empty to use the grey suggestion. In the print dialog, pick the same paper size, set margins to <b>None</b> and scale to <b>100%</b>, and turn on <b>Background graphics</b>.</p>
+          <div class="action-row"><button class="primary" id="printDesign" type="button" disabled>Print card</button></div>
+          <p class="helper" id="printHint">Upload your recording first. The QR code lands on the card once Cloudinary confirms it.</p>
+        </form>
+        <div class="preview-wrap" id="previewWrap">
+          <div class="preview-box" id="previewBox">
+            <div class="preview-scaler" id="previewScaler">
+              <article class="card" id="card" data-theme="wedding" data-orientation="portrait">
+                <div class="card-art" id="cardArt" aria-hidden="true"></div>
+                <div class="card-body">
+                  <div class="card-text">
+                    <h2 class="card-title" id="cTitle"></h2>
+                    <p class="card-names" id="cNames"></p>
+                    <p class="card-message" id="cMessage"></p>
+                  </div>
+                  <div class="card-stamp">
+                    <div class="card-qr" id="cardQr"></div>
+                    <p class="card-scan" id="cScan"></p>
+                  </div>
+                  <p class="card-footer"><span id="cDate"></span><span id="cFrom"></span></p>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <p class="print-empty">No card to print yet. Record a message and tap "Create card &amp; upload" first.</p>
+  <section id="playerView" class="panel player hidden"><div class="eyebrow">A voice postcard for you</div><h1>Press play.</h1><audio class="audio-preview" id="playerAudio" controls autoplay></audio><p class="status" id="playerStatus">This message was shared with a QR code.</p><p class="helper"><a id="recordOwn" href="./">Record your own postcard</a></p></section>
+  <script>
+    // Uploads go through the signed endpoint at api/sign (see api/sign.js) when
+    // the page is deployed with it, e.g. on Vercel. On static-only hosting
+    // (GitHub Pages, Netlify drop) the page falls back to an *unsigned* upload
+    // preset: fill these in, or enter them in the page's "Fallback" panel.
+    // (Cloudinary: Settings -> Upload -> Upload presets -> Signing Mode: Unsigned.)
+    const CLOUDINARY_CLOUD_NAME = 'YOUR_CLOUD_NAME';
+    const CLOUDINARY_UPLOAD_PRESET = 'YOUR_UNSIGNED_PRESET';
+
+    const MAX_SECONDS = 120;
+    const DB_NAME = 'voice-postcard';
+    const DB_STORE = 'recordings';
+    const SETTINGS_KEY = 'voice-postcard-settings';
+    const state = { mediaRecorder: null, chunks: [], blob: null, startedAt: 0, timerId: null, objectUrl: null, qrUrl: '' };
+    const $ = (id) => document.getElementById(id);
+    const configured = (value) => value && !value.startsWith('YOUR_');
+
+    // ---- Local copy (IndexedDB) ----------------------------------------------
+
+    function openDatabase() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = () => request.result.createObjectStore(DB_STORE);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function writeLocal(action) {
+      const db = await openDatabase();
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      action(tx.objectStore(DB_STORE));
+      return new Promise((resolve, reject) => {
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      });
+    }
+
+    const saveLocal = (blob) => writeLocal((store) => store.put({ blob, savedAt: new Date().toISOString() }, 'latest'));
+    const clearLocal = () => writeLocal((store) => store.delete('latest'));
+
+    async function loadLocal() {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const request = db.transaction(DB_STORE).objectStore(DB_STORE).get('latest');
+        request.onsuccess = () => { db.close(); resolve(request.result || null); };
+        request.onerror = () => { db.close(); reject(request.error); };
+      });
+    }
+
+    // ---- Fallback settings (localStorage) ------------------------------------
+
+    function saveSettings() {
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+          cloudName: $('cloudName').value.trim(),
+          uploadPreset: $('uploadPreset').value.trim(),
+        }));
+      } catch (_) { /* storage blocked: settings just won't persist */ }
+    }
+
+    function loadSettings() {
+      let settings = {};
+      try { settings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (_) { /* use defaults */ }
+      $('cloudName').value = settings.cloudName || (configured(CLOUDINARY_CLOUD_NAME) ? CLOUDINARY_CLOUD_NAME : '');
+      $('uploadPreset').value = settings.uploadPreset || (configured(CLOUDINARY_UPLOAD_PRESET) ? CLOUDINARY_UPLOAD_PRESET : '');
+    }
+
+    // ---- UI helpers ----------------------------------------------------------
+
+    function extensionFor(mimeType) {
+      const type = (mimeType || '').split(';')[0];
+      return { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/wav': 'wav' }[type] || 'webm';
+    }
+
+    function formatTime(seconds) {
+      const total = Math.floor(seconds);
+      return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+    }
+
+    function formatBytes(bytes) {
+      return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    // tone: 'error' | 'ok' | undefined
+    function setStatus(message, tone) {
+      $('status').textContent = message;
+      $('status').style.color = tone === 'error' ? 'var(--coral-dark)' : tone === 'ok' ? 'var(--green)' : '';
+    }
+
+    function setTimer(seconds) {
+      $('timer').childNodes[0].textContent = formatTime(seconds);
+    }
+
+    // Chrome's MediaRecorder writes WebM without a duration, so the player shows
+    // no length and can't seek. Seeking far past the end forces the browser to
+    // work out the real duration; then we jump back to the start.
+    function fixDuration(audio) {
+      audio.addEventListener('loadedmetadata', () => {
+        if (audio.duration !== Infinity) return;
+        audio.addEventListener('durationchange', () => { audio.currentTime = 0; }, { once: true });
+        audio.currentTime = 1e101;
+      }, { once: true });
+    }
+
+    function updateClipInfo() {
+      if (!state.blob) return;
+      const duration = $('audioPreview').duration;
+      const length = Number.isFinite(duration) ? `${formatTime(duration)} · ` : '';
+      $('clipInfo').textContent = `${length}${formatBytes(state.blob.size)}`;
+    }
+
+    function renderBlob(blob) {
+      state.blob = blob;
+      if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
+      state.objectUrl = URL.createObjectURL(blob);
+      fixDuration($('audioPreview'));
+      $('audioPreview').src = state.objectUrl;
+      $('listenBlock').classList.remove('hidden');
+      updateClipInfo();
+      $('createCard').disabled = false;
+      $('clearRecording').disabled = false;
+      $('savedPill').textContent = 'Local recording ready';
+    }
+
+    function togglePreview() {
+      const audio = $('audioPreview');
+      if (audio.paused) audio.play().catch(() => setStatus('This browser could not play the recording back.', 'error'));
+      else audio.pause();
+    }
+
+    function resetQr() {
+      $('uploadResult').classList.add('hidden');
+      $('cloudAudio').pause();
+      $('cloudAudio').removeAttribute('src');
+      $('createCard').textContent = 'Create card & upload';
+      state.qrUrl = '';
+      $('qrcode').innerHTML = '';
+      $('qrcode').classList.add('hidden');
+      $('qrEmpty').classList.remove('hidden');
+      $('cardQr').innerHTML = '<span class="qr-placeholder">Your QR code appears here after the upload.</span>';
+      $('cardActions').classList.add('hidden');
+      $('printDesign').disabled = true;
+      $('printHint').classList.remove('hidden');
+      document.body.classList.remove('card-ready');
+    }
+
+    function renderQr(url) {
+      $('qrcode').innerHTML = '';
+      $('qrcode').classList.remove('hidden');
+      $('qrEmpty').classList.add('hidden');
+      new QRCode($('qrcode'), { text: url, width: 210, height: 210, colorDark: '#202522', colorLight: '#fffdf8', correctLevel: QRCode.CorrectLevel.M });
+      // Rendered large and scaled down by CSS so it stays crisp in print.
+      $('cardQr').innerHTML = '';
+      new QRCode($('cardQr'), { text: url, width: 512, height: 512, colorDark: '#111111', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      $('cardActions').classList.remove('hidden');
+      $('printDesign').disabled = false;
+      $('printHint').classList.add('hidden');
+      document.body.classList.add('card-ready');
+    }
+
+    // ---- Printed card designer ----------------------------------------------
+
+    const DESIGN_KEY = 'voice-postcard-design';
+    const PAPERS = { A5: [148, 210, 'A5'], B5: [176, 250, 'B5 (ISO)'], 'B5-JIS': [182, 257, 'B5 (JIS)'] };
+
+    // Small seeded random so the confetti and stars look the same every render.
+    function seeded(seed) {
+      return () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    }
+
+    function band(position, content, fit = 'meet') {
+      return `<svg class="art-band art-${position}" viewBox="0 0 100 22" preserveAspectRatio="xMidYMid ${fit}">${content}</svg>`;
+    }
+
+    // A curved stem with leaves along it, for the wedding sprigs.
+    function sprig(x1, x2, y, sag, leaves) {
+      const cx = (x1 + x2) / 2;
+      const cy = y - sag;
+      let svg = `<path d="M${x1} ${y} Q${cx} ${cy} ${x2} ${y}" fill="none" stroke="currentColor" stroke-width=".35"/>`;
+      for (let i = 1; i < leaves; i++) {
+        const t = i / leaves;
+        const px = (1 - t) ** 2 * x1 + 2 * (1 - t) * t * cx + t * t * x2;
+        const py = (1 - t) ** 2 * y + 2 * (1 - t) * t * cy + t * t * y;
+        const angle = (Math.atan2(2 * (1 - t) * (cy - y) + 2 * t * (y - cy), 2 * (1 - t) * (cx - x1) + 2 * t * (x2 - cx)) * 180) / Math.PI;
+        for (const side of [-1, 1]) {
+          svg += `<ellipse cx="${px.toFixed(2)}" cy="${py.toFixed(2)}" rx="1.9" ry=".7" transform="rotate(${(angle + side * 38).toFixed(1)} ${px.toFixed(2)} ${py.toFixed(2)}) translate(1.6 0)" fill="currentColor" opacity="${side < 0 ? 0.9 : 0.6}"/>`;
+        }
+      }
+      return svg;
+    }
+
+    function confetti(seed, yMin = 1, yMax = 19) {
+      const rand = seeded(seed);
+      const colors = ['#e0603f', '#f5c96b', '#2f7f78', '#8fb0c9', '#e89a8a'];
+      let svg = '';
+      for (let i = 0; i < 46; i++) {
+        const x = rand() * 100;
+        const y = yMin + rand() * (yMax - yMin);
+        const color = colors[Math.floor(rand() * colors.length)];
+        const r = (rand() * 360).toFixed(0);
+        const kind = rand();
+        if (kind < 0.4) svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(0.5 + rand() * 0.6).toFixed(2)}" fill="${color}"/>`;
+        else if (kind < 0.75) svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="2" height=".8" fill="${color}" transform="rotate(${r} ${x.toFixed(1)} ${y.toFixed(1)})"/>`;
+        else svg += `<path d="M${x.toFixed(1)} ${y.toFixed(1)} l1.2 2 l-2.4 0 z" fill="${color}" transform="rotate(${r} ${x.toFixed(1)} ${y.toFixed(1)})"/>`;
+      }
+      return svg;
+    }
+
+    function stars(seed, count) {
+      const rand = seeded(seed);
+      let svg = '';
+      for (let i = 0; i < count; i++) {
+        const x = 4 + rand() * 92;
+        const y = 3 + rand() * 15;
+        const s = 0.5 + rand() * 0.9;
+        svg += `<path d="M${x} ${y - s} Q${x} ${y} ${x + s} ${y} Q${x} ${y} ${x} ${y + s} Q${x} ${y} ${x - s} ${y} Q${x} ${y} ${x} ${y - s}Z" fill="currentColor" opacity="${(0.45 + rand() * 0.5).toFixed(2)}"/>`;
+      }
+      return svg;
+    }
+
+    const OCCASIONS = {
+      wedding: {
+        title: 'Just Married',
+        names: 'Name & Name',
+        message: 'Wishing you a lifetime of love, laughter and adventures together.',
+        scan: 'Scan to hear my wishes',
+        art: () => band('top', sprig(22, 50, 13, 6, 9) + sprig(50, 78, 13, 6, 9)
+            + '<g fill="none" stroke="#b08d57" stroke-width=".35"><circle cx="48.6" cy="16.2" r="2"/><circle cx="51.4" cy="16.2" r="2"/></g>')
+          + band('bottom', `<g transform="translate(0 22) scale(1 -1)">${sprig(32, 68, 10, 3, 9)}</g>`),
+      },
+      birthday: {
+        title: 'Happy Birthday!',
+        names: 'Name',
+        message: "Another trip around the sun. Here's a little something to hear.",
+        scan: 'Scan for your birthday message',
+        art: () => band('top', confetti(7, 1, 15), 'slice') + band('bottom', confetti(19, 10, 21), 'slice'),
+      },
+      baby: {
+        title: 'Welcome, little one',
+        names: "Baby's name",
+        message: 'Congratulations on your newest family member. Sending the warmest hugs.',
+        scan: 'Scan to hear a hello',
+        art: () => band('top', stars(3, 14)
+            + '<path d="M80 5 a5 5 0 1 0 5 8 a4 4 0 1 1 -5 -8z" fill="#d58a70" opacity=".75"/>', 'slice')
+          + band('bottom', '<path d="M0 16 Q12 10 25 15 T50 14 T75 15 T100 13 V22 H0Z" fill="#8fb0c9" opacity=".35"/>'
+            + '<path d="M0 19 Q15 14 32 18 T64 17 T100 17 V22 H0Z" fill="#d58a70" opacity=".25"/>', 'slice'),
+      },
+      farewell: {
+        title: 'Bon Voyage',
+        names: 'Name',
+        message: "Every ending is a new beginning. Don't forget us out there.",
+        scan: 'Scan for a goodbye message',
+        art: () => band('top', '<path d="M12 17 C30 6 48 19 64 11 S80 6 84 8" fill="none" stroke="#1f2f45" stroke-width=".35" stroke-dasharray="1.2 1"/>'
+            + '<path d="M84 8 L93 4 L88 12 L87 9 Z" fill="#c8553d"/><path d="M87 9 L93 4" stroke="#f3ede2" stroke-width=".25"/>'
+            + '<g fill="none" stroke="#1f2f45" stroke-width=".3" opacity=".7"><circle cx="16" cy="10" r="5"/><circle cx="16" cy="10" r="4.2"/></g>'
+            + '<g font-size="1.5" text-anchor="middle" fill="#1f2f45" font-family="DM Mono, monospace"><text x="16" y="9.6">PAR</text><text x="16" y="11.6">AVION</text></g>'),
+      },
+      classic: {
+        title: 'Listen closely.',
+        names: '',
+        message: 'A few words from me, in my own voice.',
+        scan: 'Scan the stamp to listen',
+        art: () => band('top', '<circle cx="92" cy="-2" r="14" fill="#aab8a0" opacity=".5"/>', 'slice'),
+      },
+    };
+
+    function readDesign() {
+      const occasion = (document.querySelector('input[name=occasion]:checked') || {}).value || 'wedding';
+      return {
+        occasion,
+        paper: $('paper').value,
+        orientation: $('orientation').value,
+        title: $('cardTitle').value.trim(),
+        names: $('cardNames').value.trim(),
+        message: $('cardMessage').value.trim(),
+        date: $('cardDate').value.trim(),
+        from: $('cardFrom').value.trim(),
+      };
+    }
+
+    function saveDesign(design) {
+      try { localStorage.setItem(DESIGN_KEY, JSON.stringify(design)); } catch (_) { /* not persisted */ }
+    }
+
+    function loadDesign() {
+      let design = {};
+      try { design = JSON.parse(localStorage.getItem(DESIGN_KEY) || '{}'); } catch (_) { /* defaults */ }
+      const radio = document.querySelector(`input[name=occasion][value="${design.occasion}"]`);
+      if (radio) radio.checked = true;
+      if (PAPERS[design.paper]) $('paper').value = design.paper;
+      if (design.orientation === 'landscape') $('orientation').value = 'landscape';
+      $('cardTitle').value = design.title || '';
+      $('cardNames').value = design.names || '';
+      $('cardMessage').value = design.message || '';
+      $('cardDate').value = design.date || '';
+      $('cardFrom').value = design.from || '';
+    }
+
+    function scalePreview() {
+      const card = $('card');
+      const width = card.offsetWidth;
+      const height = card.offsetHeight;
+      const available = $('previewWrap').clientWidth - 2 * parseFloat(getComputedStyle($('previewWrap')).paddingLeft);
+      const scale = Math.min(1, available / width, (window.innerHeight * 0.8) / height);
+      $('previewScaler').style.transform = `scale(${scale})`;
+      $('previewBox').style.width = `${width * scale}px`;
+      $('previewBox').style.height = `${height * scale}px`;
+    }
+
+    function renderCard() {
+      const design = readDesign();
+      const occasion = OCCASIONS[design.occasion];
+      const [short, long, paperName] = PAPERS[design.paper];
+      const [width, height] = design.orientation === 'landscape' ? [long, short] : [short, long];
+      const card = $('card');
+
+      card.dataset.theme = design.occasion;
+      card.dataset.orientation = design.orientation;
+      card.style.width = `${width}mm`;
+      card.style.height = `${height}mm`;
+      card.style.setProperty('--u', `${short / 100}mm`);
+      $('pageStyle').textContent = `@page { size: ${width}mm ${height}mm; margin: 0; }`;
+      $('paperInfo').textContent = `${paperName} · ${width} × ${height} mm`;
+
+      $('cardTitle').placeholder = occasion.title;
+      $('cardNames').placeholder = occasion.names || 'optional';
+      $('cardMessage').placeholder = occasion.message;
+
+      $('cardArt').innerHTML = occasion.art();
+      $('cTitle').textContent = design.title || occasion.title;
+      $('cNames').textContent = design.names;
+      $('cNames').hidden = !design.names;
+      $('cMessage').textContent = design.message || occasion.message;
+      $('cScan').textContent = occasion.scan;
+      $('cDate').textContent = design.date;
+      $('cFrom').textContent = design.from;
+
+      saveDesign(design);
+      scalePreview();
+    }
+
+    function setRecordingUi(recording) {
+      const button = $('recordButton');
+      button.classList.toggle('recording', recording);
+      button.setAttribute('aria-label', recording ? 'Stop recording' : 'Start recording');
+      button.querySelector('span:last-child').textContent = recording ? 'Stop now' : 'Start here';
+      $('timer').querySelector('small').textContent = recording ? 'recording in progress' : 'ready when you are';
+      $('createCard').disabled = recording || !state.blob;
+      if (!recording && state.timerId) {
+        clearInterval(state.timerId);
+        state.timerId = null;
+      }
+    }
+
+    // ---- Recording -----------------------------------------------------------
+
+    function finishRecording() {
+      if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') state.mediaRecorder.stop();
+    }
+
+    async function startRecording() {
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        setStatus('This browser cannot record audio. Try a recent Chrome, Firefox, Edge, or Safari.', 'error');
+        return;
+      }
+      const maxSeconds = Math.max(5, Math.min(MAX_SECONDS, Number($('duration').value) || 30));
+      $('duration').value = maxSeconds;
+
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (_) {
+        setStatus('Microphone access is needed to record. Check your browser permissions and try again.', 'error');
+        return;
+      }
+      $('audioPreview').pause();
+
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type)) || '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      state.mediaRecorder = recorder;
+      state.chunks = [];
+      state.startedAt = Date.now();
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) state.chunks.push(event.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingUi(false);
+        if (!state.chunks.length) {
+          setStatus('Nothing was recorded. Try again.', 'error');
+          return;
+        }
+        renderBlob(new Blob(state.chunks, { type: recorder.mimeType || 'audio/webm' }));
+        try {
+          await saveLocal(state.blob);
+          setStatus('Saved locally. Press Play to listen back, then create the card when it feels right.');
+        } catch (_) {
+          setStatus('Recorded, but this browser would not keep a local copy. Create the card before leaving the page.');
+        }
+      };
+
+      resetQr();
+      setTimer(0);
+      recorder.start();
+      setRecordingUi(true);
+      state.timerId = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
+        setTimer(elapsed);
+        if (elapsed >= maxSeconds) finishRecording();
+      }, 250);
+    }
+
+    // ---- Upload --------------------------------------------------------------
+
+    // Returns a signature from api/sign, or null when the page is hosted
+    // without that function (static hosting, file://), so we can fall back.
+    async function requestSignature() {
+      let response;
+      try {
+        response = await fetch('api/sign', { method: 'POST' });
+      } catch (_) {
+        return null;
+      }
+      const isJson = (response.headers.get('content-type') || '').includes('application/json');
+      if (!isJson) return null;
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || `Signing failed (${response.status})`);
+      return body;
+    }
+
+    // XHR rather than fetch so we can report upload progress.
+    function postWithProgress(url, form, onProgress) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+        };
+        xhr.onload = () => {
+          let body = null;
+          try { body = JSON.parse(xhr.responseText); } catch (_) { /* non-JSON reply */ }
+          resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body });
+        };
+        xhr.onerror = () => reject(new Error('network error. Check your connection and try again.'));
+        xhr.send(form);
+      });
+    }
+
+    function showUploadResult(result) {
+      const details = [
+        Number.isFinite(result.duration) ? formatTime(result.duration) : null,
+        result.bytes ? formatBytes(result.bytes) : null,
+        result.format,
+        new Date(result.created_at || Date.now()).toLocaleString(),
+      ].filter(Boolean).join(' · ');
+      $('uploadDetails').textContent = `${details}\n${result.public_id || ''}`.trim();
+      $('cloudAudio').src = result.secure_url;
+      $('uploadResult').classList.remove('hidden');
+    }
+
+    async function uploadAndCreate() {
+      if (!state.blob) return;
+      const button = $('createCard');
+      button.disabled = true;
+      button.textContent = 'Uploading...';
+      $('audioPreview').pause();
+      setStatus('Uploading your voice postcard...');
+
+      try {
+        const form = new FormData();
+        form.append('file', state.blob, `voice-postcard.${extensionFor(state.blob.type)}`);
+
+        let cloudName;
+        const signed = await requestSignature();
+        if (signed) {
+          cloudName = signed.cloudName;
+          form.append('api_key', signed.apiKey);
+          form.append('timestamp', signed.timestamp);
+          form.append('folder', signed.folder);
+          form.append('signature', signed.signature);
+        } else {
+          cloudName = $('cloudName').value.trim();
+          const uploadPreset = $('uploadPreset').value.trim();
+          if (!cloudName || !uploadPreset) {
+            $('cloudName').closest('details').open = true;
+            $('cloudName').focus();
+            throw new Error('no upload server found. Add a Cloudinary cloud name and unsigned preset under "Fallback".');
+          }
+          saveSettings();
+          form.append('upload_preset', uploadPreset);
+        }
+
+        // Cloudinary files audio under the "video" resource type.
+        const response = await postWithProgress(
+          `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/video/upload`,
+          form,
+          (percent) => {
+            button.textContent = `Uploading ${percent}%`;
+            setStatus(percent < 100 ? `Uploading your voice postcard... ${percent}%` : 'Upload sent, waiting for Cloudinary to confirm...');
+          },
+        );
+        const result = response.body;
+        if (!response.ok || !result) throw new Error((result && result.error && result.error.message) || `Cloudinary returned ${response.status}`);
+        // The QR is only drawn once Cloudinary has confirmed a playable HTTPS URL.
+        if (!result.secure_url || !result.secure_url.startsWith('https://')) throw new Error('Cloudinary did not return an audio link.');
+
+        state.qrUrl = `${location.origin}${location.pathname}?msg=${encodeURIComponent(result.secure_url)}`;
+        renderQr(state.qrUrl);
+        showUploadResult(result);
+        button.textContent = 'Uploaded ✓';
+        const isLocal = location.protocol === 'file:' || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+        setStatus(isLocal
+          ? 'Uploaded to Cloudinary, but this QR points to your own computer (localhost), so it will not open on other phones. Make printed cards from your public URL.'
+          : 'Uploaded to Cloudinary. Your QR stamp is ready to print.', isLocal ? 'error' : 'ok');
+      } catch (error) {
+        setStatus(`Upload did not complete: ${error.message}`, 'error');
+        button.textContent = 'Retry upload';
+        button.disabled = false;
+      }
+    }
+
+    async function copyLink() {
+      try {
+        await navigator.clipboard.writeText(state.qrUrl);
+        setStatus('Link copied. Paste it anywhere, or write it to an NFC sticker.');
+      } catch (_) {
+        window.prompt('Copy this link:', state.qrUrl);
+      }
+    }
+
+    // ---- Startup -------------------------------------------------------------
+
+    async function restoreRecording() {
+      try {
+        const saved = await loadLocal();
+        if (saved && saved.blob) {
+          renderBlob(saved.blob);
+          setStatus('Restored your local recording from this browser.');
+        }
+      } catch (_) {
+        setStatus('Local storage is unavailable in this browser, so recordings will not survive a reload.');
+      }
+    }
+
+    function showPlayer(url) {
+      document.querySelector('.shell').classList.add('hidden');
+      $('playerView').classList.remove('hidden');
+      let parsed = null;
+      try { parsed = new URL(url); } catch (_) { /* handled below */ }
+      if (!parsed || parsed.protocol !== 'https:') {
+        $('playerAudio').classList.add('hidden');
+        $('playerStatus').textContent = 'This postcard link looks broken. Ask the sender to share it again.';
+        return;
+      }
+      $('playerAudio').src = parsed.href;
+      $('playerAudio').addEventListener('error', () => {
+        $('playerStatus').textContent = 'This message could not be loaded. It may have been removed.';
+      });
+    }
+
+    $('recordButton').addEventListener('click', () => (state.mediaRecorder && state.mediaRecorder.state === 'recording' ? finishRecording() : startRecording()));
+    $('createCard').addEventListener('click', uploadAndCreate);
+    $('clearRecording').addEventListener('click', async () => {
+      try { await clearLocal(); } catch (_) { /* nothing stored */ }
+      state.blob = null;
+      $('audioPreview').pause();
+      $('audioPreview').removeAttribute('src');
+      $('listenBlock').classList.add('hidden');
+      $('createCard').disabled = true;
+      $('clearRecording').disabled = true;
+      $('savedPill').textContent = 'No recording saved yet';
+      setTimer(0);
+      resetQr();
+      setStatus('Local recording cleared.');
+    });
+    const printCard = () => {
+      if (state.qrUrl) window.print();
+    };
+    $('printButton').addEventListener('click', printCard);
+    $('printDesign').addEventListener('click', printCard);
+    $('designForm').addEventListener('input', renderCard);
+    $('designForm').addEventListener('change', renderCard);
+    window.addEventListener('resize', scalePreview);
+    $('copyLink').addEventListener('click', copyLink);
+    $('playPreview').addEventListener('click', togglePreview);
+    $('audioPreview').addEventListener('play', () => { $('playPreview').innerHTML = '&#10074;&#10074; Pause'; });
+    ['pause', 'ended', 'emptied'].forEach((type) => $('audioPreview').addEventListener(type, () => { $('playPreview').innerHTML = '&#9654; Play'; }));
+    $('audioPreview').addEventListener('durationchange', updateClipInfo);
+    $('cloudAudio').addEventListener('error', () => {
+      if ($('cloudAudio').getAttribute('src')) setStatus('Uploaded, but the cloud copy will not play in this browser. Try opening the link on your phone.', 'error');
+    });
+    $('cloudName').addEventListener('change', saveSettings);
+    $('uploadPreset').addEventListener('change', saveSettings);
+
+    $('duration').max = MAX_SECONDS;
+    $('recordOwn').href = location.pathname;
+    loadSettings();
+    loadDesign();
+    resetQr();
+    renderCard();
+    if (document.fonts) document.fonts.ready.then(scalePreview);
+    const messageUrl = new URLSearchParams(location.search).get('msg');
+    if (messageUrl) showPlayer(messageUrl); else restoreRecording();
+  </script>
+</body>
+</html>
