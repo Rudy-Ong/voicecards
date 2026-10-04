@@ -35,59 +35,40 @@ portrait or landscape.
  │ index.html (recorder mode)                  │
  │   1. record with the microphone             │
  │   2. keep a local copy in the browser       │
- │   3. POST /api/sign ───────────────┐        │
- │   4. upload clip to Cloudinary ◄───┘ signature
- │   5. print a card with a QR code for        │
- │      index.html?msg=<audio-url>             │
+ │   3. upload clip to Cloudinary              │
+ │   4. print a card with a QR code for        │
+ │      the Cloudinary audio URL               │
  └─────────────────────────────────────────────┘
                      │ print, mail, hand over
                      ▼
  ┌──────────── recipient's phone ──────────────┐
- │ index.html?msg=…  (player mode)             │
+ │ res.cloudinary.com/<cloud>/video/upload/…   │
  │   plays the audio straight from Cloudinary  │
  └─────────────────────────────────────────────┘
 ```
 
-- **One page, two modes.** Opened plain, `index.html` is the recorder and card
-  designer. Opened with `?msg=<audio-url>`, it's a simple player. The QR code
-  holds that second kind of link.
-- **Cloudinary hosts the audio.** The browser uploads the clip directly to
-  your Cloudinary account and gets back a public HTTPS link.
-- **The only backend is one small function.** `api/sign.js` signs each
-  upload with your Cloudinary API secret, so the secret never reaches the
-  browser. It signs only a fixed folder (`voice-postcards/`) and a timestamp,
-  and each signature expires after an hour.
+- **The QR code points straight at the audio file.** It holds the Cloudinary
+  URL, for example
+  `https://res.cloudinary.com/<cloud-name>/video/upload/voice-postcards/<id>.mp3`,
+  so a printed card keeps working even if the site moves or goes offline.
+  The `.mp3` ending makes Cloudinary convert the recording on the fly, so it
+  plays on any phone.
+- **Cloudinary hosts the audio.** The browser uploads the clip straight to
+  Cloudinary through an unsigned upload preset and gets back a public HTTPS
+  link.
+- **No server needed.** The site is a single static page, so any static host
+  works (GitHub Pages, Netlify, Cloudflare Pages).
 
 ---
 
 ## Prerequisites
 
-| You need                    | Why                                              | Cost |
+| Requirement                 | Purpose                                          | Cost |
 | --------------------------- | ------------------------------------------------ | ---- |
 | A **Cloudinary** account    | Stores the recorded audio                        | Free plan |
-| A **GitHub** account        | Holds your copy of this repo                     | Free |
-| A **Vercel** account        | Hosts the page and the signing function          | Free (Hobby) |
+| A **GitHub** account        | Holds the code and hosts the page (GitHub Pages) | Free |
 | A browser with a microphone | Recording (recent Chrome, Edge, Firefox, Safari) | — |
-| Node.js 18+ *(optional)*    | Only for running it locally                      | Free |
-
-### Create your Cloudinary account first
-
-Do this before anything else. The app has nowhere to store recordings
-without it.
-
-1. Sign up at <https://cloudinary.com/users/register_free>. The free plan
-   needs no credit card.
-2. Open the **Console**, then **Settings** (gear icon) → **API Keys**.
-3. Note three values. You'll paste them into Vercel later:
-
-   | Value          | Example           | Secret? |
-   | -------------- | ----------------- | ------- |
-   | **Cloud name** | `dxyz12abc`       | No      |
-   | **API key**    | `123456789012345` | No      |
-   | **API secret** | `aBcD…`           | **Yes. Never commit it or put it in `index.html`.** |
-
-> Uploads go into a `voice-postcards/` folder in your Media Library, so they
-> stay separate from anything else in the account.
+| Node.js 18+ *(optional)*    | Running the page locally                         | Free |
 
 ---
 
@@ -95,59 +76,49 @@ without it.
 
 ### 1. Get the code
 
-Fork this repo on GitHub, or clone it and push it to your own repository:
+Fork this repo on GitHub, or clone it and push it to a new repo:
 
 ```bash
-git clone https://github.com/<you>/voice-postcard.git
-cd voice-postcard
+git clone https://github.com/Rudy-Ong/voicecards.git
+cd voicecards
 ```
 
-### 2. Deploy to Vercel
+### 2. Set up Cloudinary
 
-1. Go to <https://vercel.com/new> and import your repository.
-2. **Framework Preset:** `Other`. Leave the build and output settings empty.
-   There's no build step.
-3. Open **Environment Variables** and add the three values from Cloudinary:
+1. Sign up at <https://cloudinary.com/users/register_free>.
+2. Copy the **Cloud name** from the Console dashboard.
+3. Go to **Settings → Upload → Upload presets → Add upload preset** and set:
 
-   ```
-   CLOUDINARY_CLOUD_NAME=your-cloud-name
-   CLOUDINARY_API_KEY=your-api-key
-   CLOUDINARY_API_SECRET=your-api-secret
-   ```
-4. Click **Deploy**. Vercel serves `index.html` at `/` and `api/sign.js` at
-   `/api/sign` automatically.
-5. To check it worked, open your site, open the browser console, and run:
+   | Setting         | Value                              |
+   | --------------- | ---------------------------------- |
+   | Signing Mode    | **Unsigned**                       |
+   | Asset folder    | `voice-postcards`                  |
+   | Allowed formats | `webm, ogg, m4a, mp4, mp3, wav`    |
+   | Max file size   | about 10 MB                        |
 
-   ```js
-   fetch('/api/sign', { method: 'POST' }).then(r => r.json()).then(console.log)
-   ```
+4. Save and copy the preset name.
 
-   If you see a `signature`, it's working. If you see *"Upload signing is not
-   configured"*, the environment variables are missing, or you haven't
-   redeployed since adding them.
+### 3. Add the Cloudinary details
 
-> **Make printed cards from your production URL** (`https://<project>.vercel.app`
-> or your own domain). The QR code holds whatever address you're on.
-> Vercel's preview URLs sit behind a login, and `localhost` only works on
-> your own computer.
+Open `index.html` and fill in the two values near the top of the script:
 
-<details>
-<summary><b>Alternative: static hosting without Vercel (GitHub Pages, Netlify drop)</b></summary>
+```js
+const CLOUDINARY_CLOUD_NAME = 'your-cloud-name';
+const CLOUDINARY_UPLOAD_PRESET = 'your-preset-name';
+```
 
-Static hosts can't run `api/sign.js`, so the page falls back to a Cloudinary
-**unsigned upload preset**:
+Commit and push. Leaving these as placeholders also works: enter both values
+on the site under **Fallback: unsigned upload** instead. That way they're
+stored only in that browser.
 
-1. In Cloudinary, go to **Settings → Upload → Upload presets → Add upload
-   preset**. Set **Signing Mode: Unsigned**, **Asset folder:**
-   `voice-postcards`, **Allowed formats:** `webm, ogg, m4a, mp4, mp3, wav`,
-   and **Max file size:** about 10 MB.
-2. Publish the repo, for example through **Settings → Pages → main branch**.
-3. On the site, expand **Fallback: unsigned upload** and enter your cloud name
-   and preset name. They're saved only in that browser.
+### 4. Publish
 
-Anyone who learns an unsigned preset name can upload to your account with it.
-Prefer Vercel if the site is public.
-</details>
+In the GitHub repo, go to **Settings → Pages**, choose **Deploy from a
+branch**, pick `master` and `/ (root)`, then save. The site goes live at
+`https://<username>.github.io/voicecards/` after a minute or two.
+
+> The QR code links to Cloudinary, not to this site, so cards made on
+> `localhost` work the same as cards made on the published site.
 
 ---
 
@@ -158,7 +129,7 @@ This example makes a card for the made-up couple **Sofia & Mateo**, from
 
 ### Step 1: Record your message
 
-Open your deployed site and tap the orange **Start here** button. Speak, then
+Open the published site and tap the orange **Start here** button. Speak, then
 tap it again to stop. The **limit** field sets the maximum length (up to 2
 minutes).
 
@@ -182,6 +153,10 @@ confirms the upload:
 If the upload fails, the error shows in red and the button becomes **Retry
 upload**. No QR code is made until an upload succeeds, so you can't print a
 card with a broken code.
+
+Already have a clip in Cloudinary? Copy its URL from the Media Library, paste
+it into **Audio link**, then tap **Use this link** (or press Enter). The QR
+code and the printed card switch to that clip, as an `.mp3` link.
 
 ### Step 3: Fill in the card
 
@@ -224,7 +199,7 @@ printers can't print to the very edge, so trim the card or use a print shop.
 ### Step 5: Give it away
 
 Hand it over at the wedding or mail it. The couple scans the QR code with
-their phone's camera, the page opens, and your message plays. No app needed.
+their phone's camera, the audio opens in the browser, and your message plays. No app needed.
 
 Prefer tapping to scanning? Tap **Copy link** and write the link to an NFC
 sticker (NFC Tools or a similar app) to put on the card.
@@ -245,12 +220,10 @@ Every design works with every paper size and both orientations.
 ## Local development
 
 ```bash
-cp .env.example .env      # fill in your three Cloudinary values
-npx vercel dev            # serves the page and /api/sign on http://localhost:3000
+npx serve .               # serves the page on http://localhost:3000
 ```
 
-The microphone needs `localhost` or HTTPS. Cards made on `localhost` get a
-warning, because their QR codes only work on your own computer.
+The microphone needs `localhost` or HTTPS.
 
 ---
 
@@ -259,8 +232,8 @@ warning, because their QR codes only work on your own computer.
 | Path           | What it is                                                            |
 | -------------- | --------------------------------------------------------------------- |
 | `index.html`   | The whole frontend: recorder, player, card designer, styles and script |
-| `api/sign.js`  | Vercel serverless function that returns a Cloudinary upload signature  |
-| `.env.example` | The environment variables `api/sign.js` needs                          |
+| `api/sign.js`  | Optional serverless function for signed uploads (unused on static hosts) |
+| `.env.example` | Variables for `api/sign.js`, only needed if that function is deployed  |
 | `img/`         | Screenshots used in this README                                        |
 | `LICENSE`      | MIT                                                                    |
 
@@ -281,8 +254,10 @@ Fonts.
   to the domain they were made on. If you want a custom domain, set it up
   before you print.
 - **Cloudinary's free plan has monthly usage limits.** They're plenty for
-  personal cards. Check your dashboard if the site is public.
-  `/api/sign` refuses requests from other websites.
+  personal cards. Check the dashboard if the site is public.
+- **The upload preset name is public.** It's visible in the page source, so
+  anyone who finds it can upload to the account. The format and size limits
+  on the preset keep that in check.
 
 ---
 

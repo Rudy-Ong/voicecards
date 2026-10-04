@@ -224,8 +224,10 @@
       </section>
       <aside class="panel stamp-panel" aria-labelledby="stampHeading">
         <div class="card-caption"><strong id="stampHeading">02 / Your stamp</strong><span>SCAN TO LISTEN</span></div>
-        <div class="qr-wrap"><div class="qr-empty" id="qrEmpty">Your QR code will appear here after the audio is uploaded.</div><div id="qrcode" class="hidden" aria-label="Generated QR code"></div></div>
-        <p class="helper">The code opens this page with the uploaded audio ready to play. For a recipient to scan it, publish this page at a public URL first.</p>
+        <div class="qr-wrap"><div class="qr-empty" id="qrEmpty">Your QR code will appear here after the audio is uploaded or a link is pasted below.</div><div id="qrcode" class="hidden" aria-label="Generated QR code"></div></div>
+        <p class="helper">The code links straight to the uploaded audio on Cloudinary.</p>
+        <div class="fields"><label>Audio link<input id="audioLink" type="url" placeholder="Paste a Cloudinary audio URL" autocomplete="off" spellcheck="false"></label></div>
+        <div class="action-row"><button class="secondary" id="useLink" type="button">Use this link</button></div>
         <div class="upload-result hidden" id="uploadResult" role="status">
           <strong>&#10003; Uploaded to Cloudinary</strong>
           <p id="uploadDetails"></p>
@@ -261,7 +263,7 @@
           </div>
           <p class="helper">Leave a field empty to use the grey suggestion. In the print dialog, pick the same paper size, set margins to <b>None</b> and scale to <b>100%</b>, and turn on <b>Background graphics</b>.</p>
           <div class="action-row"><button class="primary" id="printDesign" type="button" disabled>Print card</button></div>
-          <p class="helper" id="printHint">Upload your recording first. The QR code lands on the card once Cloudinary confirms it.</p>
+          <p class="helper" id="printHint">Upload a recording or paste a Cloudinary link first. The QR code lands on the card once there's an audio link.</p>
         </form>
         <div class="preview-wrap" id="previewWrap">
           <div class="preview-box" id="previewBox">
@@ -295,8 +297,8 @@
     // (GitHub Pages, Netlify drop) the page falls back to an *unsigned* upload
     // preset: fill these in, or enter them in the page's "Fallback" panel.
     // (Cloudinary: Settings -> Upload -> Upload presets -> Signing Mode: Unsigned.)
-    const CLOUDINARY_CLOUD_NAME = 'YOUR_CLOUD_NAME';
-    const CLOUDINARY_UPLOAD_PRESET = 'YOUR_UNSIGNED_PRESET';
+    const CLOUDINARY_CLOUD_NAME = 'u0prnhpj';
+    const CLOUDINARY_UPLOAD_PRESET = 'voice_postcard';
 
     const MAX_SECONDS = 120;
     const DB_NAME = 'voice-postcard';
@@ -426,6 +428,7 @@
       $('cloudAudio').removeAttribute('src');
       $('createCard').textContent = 'Create card & upload';
       state.qrUrl = '';
+      $('audioLink').value = '';
       $('qrcode').innerHTML = '';
       $('qrcode').classList.add('hidden');
       $('qrEmpty').classList.remove('hidden');
@@ -436,7 +439,25 @@
       document.body.classList.remove('card-ready');
     }
 
+    // Cloudinary converts audio on the fly when the URL ends in .mp3, and MP3
+    // plays on every phone. Other https links are used as they are.
+    function toQrUrl(href) {
+      let url;
+      try { url = new URL(href.trim()); } catch (_) { return null; }
+      if (url.hostname === 'res.cloudinary.com') {
+        url.protocol = 'https:';
+        url.search = '';
+        url.hash = '';
+        if (url.pathname.includes('/video/upload/')) {
+          url.pathname = /\.[^./]+$/.test(url.pathname) ? url.pathname.replace(/\.[^./]+$/, '.mp3') : `${url.pathname}.mp3`;
+        }
+      }
+      return url.protocol === 'https:' ? url.href : null;
+    }
+
     function renderQr(url) {
+      state.qrUrl = url;
+      $('audioLink').value = url;
       $('qrcode').innerHTML = '';
       $('qrcode').classList.remove('hidden');
       $('qrEmpty').classList.add('hidden');
@@ -797,14 +818,12 @@
         // The QR is only drawn once Cloudinary has confirmed a playable HTTPS URL.
         if (!result.secure_url || !result.secure_url.startsWith('https://')) throw new Error('Cloudinary did not return an audio link.');
 
-        state.qrUrl = `${location.origin}${location.pathname}?msg=${encodeURIComponent(result.secure_url)}`;
-        renderQr(state.qrUrl);
+        // The QR holds the Cloudinary file URL itself, so it works no matter
+        // where this page is hosted (including localhost).
+        renderQr(toQrUrl(result.secure_url));
         showUploadResult(result);
         button.textContent = 'Uploaded ✓';
-        const isLocal = location.protocol === 'file:' || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-        setStatus(isLocal
-          ? 'Uploaded to Cloudinary, but this QR points to your own computer (localhost), so it will not open on other phones. Make printed cards from your public URL.'
-          : 'Uploaded to Cloudinary. Your QR stamp is ready to print.', isLocal ? 'error' : 'ok');
+        setStatus('Uploaded to Cloudinary. Your QR stamp is ready to print.', 'ok');
       } catch (error) {
         setStatus(`Upload did not complete: ${error.message}`, 'error');
         button.textContent = 'Retry upload';
@@ -819,6 +838,17 @@
       } catch (_) {
         window.prompt('Copy this link:', state.qrUrl);
       }
+    }
+
+    function useLink() {
+      const url = toQrUrl($('audioLink').value);
+      if (!url) {
+        setStatus('That link does not look right. Paste the full https:// address of the audio file.', 'error');
+        $('audioLink').focus();
+        return;
+      }
+      renderQr(url);
+      setStatus('QR code updated. The printed card now links to this audio.', 'ok');
     }
 
     // ---- Startup -------------------------------------------------------------
@@ -875,6 +905,8 @@
     $('designForm').addEventListener('change', renderCard);
     window.addEventListener('resize', scalePreview);
     $('copyLink').addEventListener('click', copyLink);
+    $('useLink').addEventListener('click', useLink);
+    $('audioLink').addEventListener('keydown', (event) => { if (event.key === 'Enter') useLink(); });
     $('playPreview').addEventListener('click', togglePreview);
     $('audioPreview').addEventListener('play', () => { $('playPreview').innerHTML = '&#10074;&#10074; Pause'; });
     ['pause', 'ended', 'emptied'].forEach((type) => $('audioPreview').addEventListener(type, () => { $('playPreview').innerHTML = '&#9654; Play'; }));
